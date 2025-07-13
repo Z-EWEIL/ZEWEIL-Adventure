@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZEWEIL Adventure - مرحلة صحراوية</title>
+<style>
+  body {
+    margin: 0; background: linear-gradient(to bottom, #c2b280, #a9743b);
+    font-family: "Arial", sans-serif;
+    overflow: hidden;
+  }
+  #game {
+    position: relative;
+    width: 800px; height: 400px;
+    margin: 20px auto;
+    background: #f4e3b2;
+    border: 3px solid #6f4e37;
+    overflow: hidden;
+    box-shadow: 0 0 15px #6f4e37;
+  }
+  #player {
+    position: absolute;
+    bottom: 40px;
+    left: 50px;
+    width: 40px; height: 60px;
+    background: #0055ff;
+    border-radius: 8px;
+  }
+  .obstacle {
+    position: absolute;
+    bottom: 40px;
+    width: 30px; height: 60px;
+    background: #7b3f00;
+    border-radius: 5px;
+  }
+  #scoreBoard {
+    width: 800px;
+    margin: 0 auto;
+    color: #4b3b00;
+    font-weight: bold;
+    font-size: 18px;
+    text-align: center;
+    user-select: none;
+  }
+  #message {
+    width: 800px;
+    margin: 10px auto;
+    font-size: 20px;
+    font-weight: bold;
+    color: darkred;
+    text-align: center;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="scoreBoard">النقاط: 0 | المرحلة: 1 / 10</div>
+<div id="game">
+  <div id="player"></div>
+</div>
+<div id="message"></div>
+
+<script>
+  const game = document.getElementById("game");
+  const player = document.getElementById("player");
+  const scoreBoard = document.getElementById("scoreBoard");
+  const message = document.getElementById("message");
+
+  const gameWidth = 800;
+  const gameHeight = 400;
+  const playerWidth = 40;
+  const playerHeight = 60;
+  const groundLevel = 40; // from bottom
+  let score = 0;
+  let level = 1;
+  const maxLevels = 10;
+  let obstacles = [];
+  let obstacleSpeed = 4;
+  let obstacleFrequency = 1500; // ms between obstacles
+  let gameOver = false;
+  let canJump = true;
+  let jumpHeight = 120;
+  let jumpDuration = 600; // ms
+  let playerBottom = groundLevel;
+  let isJumping = false;
+
+  // Control jump on space or tap
+  window.addEventListener("keydown", (e) => {
+    if ((e.code === "Space" || e.code === "ArrowUp") && !isJumping && !gameOver) {
+      jump();
+    }
+  });
+
+  game.addEventListener("click", () => {
+    if (!isJumping && !gameOver) {
+      jump();
+    }
+  });
+
+  function jump() {
+    isJumping = true;
+    let start = null;
+    const upDuration = jumpDuration / 2;
+
+    function animateJump(timestamp) {
+      if (!start) start = timestamp;
+      let elapsed = timestamp - start;
+
+      if (elapsed < upDuration) {
+        // Going up
+        player.style.bottom = groundLevel + (jumpHeight * (elapsed / upDuration)) + "px";
+      } else if (elapsed < jumpDuration) {
+        // Going down
+        let downElapsed = elapsed - upDuration;
+        player.style.bottom = groundLevel + jumpHeight * (1 - downElapsed / upDuration) + "px";
+      } else {
+        player.style.bottom = groundLevel + "px";
+        isJumping = false;
+        return;
+      }
+      requestAnimationFrame(animateJump);
+    }
+    requestAnimationFrame(animateJump);
+  }
+
+  function createObstacle() {
+    if (gameOver) return;
+    const obstacle = document.createElement("div");
+    obstacle.classList.add("obstacle");
+    obstacle.style.left = gameWidth + "px";
+    obstacle.style.bottom = groundLevel + "px";
+
+    // Random obstacle height variation
+    const h = 40 + Math.random() * 20;
+    obstacle.style.height = h + "px";
+
+    game.appendChild(obstacle);
+    obstacles.push(obstacle);
+  }
+
+  function updateObstacles() {
+    obstacles.forEach((obs, i) => {
+      let left = parseFloat(obs.style.left);
+      left -= obstacleSpeed;
+      if (left < -30) {
+        // Passed screen, remove obstacle
+        game.removeChild(obs);
+        obstacles.splice(i, 1);
+        score++;
+        updateScore();
+        // Check if level up
+        if (score % maxLevels === 0) {
+          level++;
+          if (level > maxLevels) {
+            winGame();
+            return;
+          }
+          obstacleSpeed += 0.5;
+          obstacleFrequency = Math.max(700, obstacleFrequency - 100);
+          showMessage("المرحلة " + level + " بدأت!");
+          updateScore();
+        }
+      } else {
+        obs.style.left = left + "px";
+      }
+
+      // Collision detection
+      if (detectCollision(player, obs)) {
+        endGame();
+      }
+    });
+  }
+
+  function detectCollision(rect1, rect2) {
+    const r1 = rect1.getBoundingClientRect();
+    const r2 = rect2.getBoundingClientRect();
+
+    return !(
+      r1.top > r2.bottom ||
+      r1.bottom < r2.top ||
+      r1.right < r2.left ||
+      r1.left > r2.right
+    );
+  }
+
+  function updateScore() {
+    scoreBoard.textContent = `النقاط: ${score} | المرحلة: ${level} / ${maxLevels}`;
+  }
+
+  function endGame() {
+    gameOver = true;
+    showMessage("انتهت اللعبة! نقاطك: " + score);
+  }
+
+  function winGame() {
+    gameOver = true;
+    showMessage("مبروك! لقد أكملت كل المراحل!");
+  }
+
+  function showMessage(text) {
+    message.textContent = text;
+    setTimeout(() => {
+      message.textContent = "";
+    }, 3000);
+  }
+
+  // Game loop
+  let lastObstacleTime = 0;
+  function gameLoop(timestamp = 0) {
+    if (gameOver) return;
+
+    if (timestamp - lastObstacleTime > obstacleFrequency) {
+      createObstacle();
+      lastObstacleTime = timestamp;
+    }
+    updateObstacles();
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  updateScore();
+  gameLoop();
+
+</script>
+</body>
+</html>
